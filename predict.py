@@ -72,9 +72,9 @@ def go_mgie(img, txt, seed, cfg_txt, cfg_img, image_processor, image_token_len, 
     
 class Predictor(BasePredictor):
     def setup(self) -> None:
-        self.tokenizer = transformers.AutoTokenizer.from_pretrained(PATH_LLAVA)
-        self.model = LlavaLlamaForCausalLM.from_pretrained(PATH_LLAVA, low_cpu_mem_usage=True, torch_dtype=T.float16, use_cache=True).cuda()
-        self.image_processor = transformers.CLIPImageProcessor.from_pretrained(self.model.config.mm_vision_tower, torch_dtype=T.float16)
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(PATH_LLAVA, use_safetensors=False)
+        self.model = LlavaLlamaForCausalLM.from_pretrained(PATH_LLAVA, low_cpu_mem_usage=True, torch_dtype=T.float16, use_cache=True, use_safetensors=False).cuda()
+        self.image_processor = transformers.CLIPImageProcessor.from_pretrained(self.model.config.mm_vision_tower, torch_dtype=T.float16, use_safetensors=False)
         
         self.tokenizer.padding_side = 'left'
         self.tokenizer.add_tokens(['[IMG0]', '[IMG1]', '[IMG2]', '[IMG3]', '[IMG4]', '[IMG5]', '[IMG6]', '[IMG7]'], special_tokens=True)
@@ -87,7 +87,7 @@ class Predictor(BasePredictor):
         if mm_use_im_start_end: self.tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True)
         
         vision_tower = self.model.get_model().vision_tower[0]
-        vision_tower = transformers.CLIPVisionModel.from_pretrained(vision_tower.config._name_or_path, torch_dtype=T.float16, low_cpu_mem_usage=True).cuda()
+        vision_tower = transformers.CLIPVisionModel.from_pretrained(vision_tower.config._name_or_path, torch_dtype=T.float16, low_cpu_mem_usage=True, use_safetensors=False).cuda()
         self.model.get_model().vision_tower[0] = vision_tower
         vision_config = vision_tower.config
         vision_config.im_patch_token = self.tokenizer.convert_tokens_to_ids([DEFAULT_IMAGE_PATCH_TOKEN])[0]
@@ -99,7 +99,7 @@ class Predictor(BasePredictor):
         self.EMB = ckpt['emb'].cuda()
         with T.inference_mode(): self.NULL = self.model.edit_head(T.zeros(1, 8, 4096).half().to('cuda'), self.EMB)
         
-        self.pipe = diffusers.StableDiffusionInstructPix2PixPipeline.from_pretrained('timbrooks/instruct-pix2pix', torch_dtype=T.float16).to('cuda')
+        self.pipe = diffusers.StableDiffusionInstructPix2PixPipeline.from_pretrained('timbrooks/instruct-pix2pix', torch_dtype=T.float16, use_safetensors=False).to('cuda')
         self.pipe.set_progress_bar_config(disable=True)
         self.pipe.unet.load_state_dict(T.load('/content/ml-mgie-hf/data/mgie_7b/unet.pt', map_location='cpu'))
         print('--init MGIE--')
