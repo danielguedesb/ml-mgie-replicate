@@ -10,7 +10,7 @@ build:
     - pip install notebook pyngrok pickleshare ipywidgets imageio-ffmpeg pandas numpy==1.23.5 ninja
     - pip install https://download.pytorch.org/whl/cu121/xformers-0.0.22.post7-cp310-cp310-manylinux2014_x86_64.whl
     - sed -i 's/return caster.operator typename make_caster<T>::template cast_op_type<T>();/return caster;/' /usr/local/lib/python3.10/site-packages/torch/include/pybind11/cast.h
-    - pip install transformers==4.31.0 sentencepiece diffusers tokenizers datasets accelerate evaluate
+    - pip install scipy transformers==4.31.0 sentencepiece diffusers tokenizers datasets accelerate evaluate
     - pip install git+https://github.com/haotian-liu/LLaVA@7ace501
     - git clone -b main https://github.com/danielguedesb/ml-mgie-hf /content/ml-mgie-hf && mv /content/ml-mgie-hf/llava.py /usr/local/lib/python3.10/site-packages/llava/model/llava.py && mv /content/ml-mgie-hf/train.py /usr/local/lib/python3.10/site-packages/llava/train/train.py
     - aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co/daniel-at-anvil/pytorch_mgie/resolve/main/mgie_7b/mllm.pt -d /content/ml-mgie-hf/data/mgie_7b -o mllm.pt

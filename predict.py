@@ -39,7 +39,17 @@ def remove_alter(s):  # hack expressive instruction
     if s[-1]!='.': s += '.'
     return s.strip()
 
-def go_mgie(img, txt, seed, cfg_txt, cfg_img, image_processor, image_token_len, EMB, tokenizer, model, pipe, NULL):
+def make_scheduler(name, config):
+    return {
+        "PNDM": diffusers.PNDMScheduler.from_config(config),
+        "KLMS": diffusers.LMSDiscreteScheduler.from_config(config),
+        "DDIM": diffusers.DDIMScheduler.from_config(config),
+        "K_EULER": diffusers.EulerDiscreteScheduler.from_config(config),
+        "K_EULER_ANCESTRAL": diffusers.EulerAncestralDiscreteScheduler.from_config(config),
+        "DPMSolverMultistep": diffusers.DPMSolverMultistepScheduler.from_config(config),
+    }[name]
+
+def go_mgie(num_inference_steps, scheduler, img, txt, seed, cfg_txt, cfg_img, image_processor, image_token_len, EMB, tokenizer, model, pipe, NULL):
     img, seed = crop_resize(Image.fromarray(img).convert('RGB')), int(seed)
     inp = img
 
@@ -65,7 +75,8 @@ def go_mgie(img, txt, seed, cfg_txt, cfg_img, image_processor, image_token_len, 
 
         out = remove_alter(tokenizer.decode(out))
         emb = model.edit_head(hid.unsqueeze(dim=0), EMB)
-        res = pipe(image=inp, prompt_embeds=emb, negative_prompt_embeds=NULL, 
+        pipe.scheduler = make_scheduler(scheduler, pipe.scheduler.config)
+        res = pipe(image=inp, prompt_embeds=emb, negative_prompt_embeds=NULL, num_inference_steps=num_inference_steps,
                    generator=T.Generator(device='cuda').manual_seed(seed), guidance_scale=cfg_txt, image_guidance_scale=cfg_img).images[0]
         res.save("/content/image.png")
     return "/content/image.png", out
@@ -99,17 +110,31 @@ class Predictor(BasePredictor):
         self.EMB = ckpt['emb'].cuda()
         with T.inference_mode(): self.NULL = self.model.edit_head(T.zeros(1, 8, 4096).half().to('cuda'), self.EMB)
         
-        self.pipe = diffusers.StableDiffusionInstructPix2PixPipeline.from_pretrained('timbrooks/instruct-pix2pix', torch_dtype=T.float16, use_safetensors=False).to('cuda')
-        self.pipe.set_progress_bar_config(disable=True)
+        self.pipe = diffusers.StableDiffusionInstructPix2PixPipeline.from_pretrained('timbrooks/instruct-pix2pix', torch_dtype=T.float16, use_safetensors=False, safety_checker=None).to('cuda')
+        self.pipe.set_progress_bar_config(disable=False)
         self.pipe.unet.load_state_dict(T.load('/content/ml-mgie-hf/data/mgie_7b/unet.pt', map_location='cpu'))
+
         print('--init MGIE--')
     def predict(
         self,
         input_image: Path = Input(description="Input Image"),
-        prompt: str = Input(default="make the frame red"),
-        seed: int = Input(default=13331),
+        prompt: str = Input(default="How would it look like with colors inverted"),
+        seed: int = Input(default=5884123),
         text_cfg: float = Input(default=7.5),
         image_cfg: float = Input(default=1.5),
+        num_inference_steps: int = Input(default=100),
+        scheduler: str = Input(
+            default="K_EULER_ANCESTRAL",
+            choices=[
+                "DDIM",
+                "K_EULER",
+                "DPMSolverMultistep",
+                "K_EULER_ANCESTRAL",
+                "PNDM",
+                "KLMS",
+            ],
+            description="Choose a scheduler.",
+        )
     ) -> Output:
-        res, out = go_mgie(np.array(Image.open(input_image).convert('RGB')), prompt, seed, text_cfg, image_cfg, self.image_processor, self.image_token_len, self.EMB, self.tokenizer, self.model, self.pipe, self.NULL)
+        res, out = go_mgie(num_inference_steps, scheduler, np.array(Image.open(input_image).convert('RGB')), prompt, seed, text_cfg, image_cfg, self.image_processor, self.image_token_len, self.EMB, self.tokenizer, self.model, self.pipe, self.NULL)
         return Output(path = Path(res), text = out)
